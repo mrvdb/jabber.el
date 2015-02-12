@@ -192,48 +192,45 @@ With double prefix argument, specify more connection details."
 	  (entry (assoc jid jabber-account-list))
 	  (alist (cdr entry))
 	  password network-server port connection-type registerp)
-     (flet ((nonempty
-	     (s)
-	     (unless (zerop (length s)) s)))
-       (when entry
-	 ;; If the user entered the JID of one of the preconfigured
-	 ;; accounts, use that data.
-	 (setq password (cdr (assq :password alist)))
-	 (setq network-server (cdr (assq :network-server alist)))
-	 (setq port (cdr (assq :port alist)))
-	 (setq connection-type (cdr (assq :connection-type alist))))
-       (when (equal current-prefix-arg '(16))
-	 ;; Double prefix arg: ask about everything.
-	 ;; (except password, which is asked about later anyway)
-	 (setq password nil)
-	 (setq network-server
-	       (read-string (format "Network server: (default `%s') " network-server)
-			    nil nil network-server))
-	 (when (zerop (length network-server))
-	   (setq network-server nil))
-	 (setq port
-	       (car
-		(read-from-string
-		 (read-string (format "Port: (default `%s') " port)
-			      nil nil (if port (number-to-string port) "nil")))))
-	 (setq connection-type
-	       (car
-		(read-from-string
-		 (let ((default (symbol-name (or connection-type jabber-default-connection-type))))
-		   (completing-read
-		    (format "Connection type: (default `%s') " default)
-		    (mapcar (lambda (type)
-			      (cons (symbol-name (car type)) nil))
-			    jabber-connect-methods)
-		    nil t nil 'jabber-connection-type-history default)))))
-	 (setq registerp (or jabber-silent-mode (yes-or-no-p "Register new account? "))))
-       (when (equal current-prefix-arg '(4))
-	 (setq registerp t))
+     (when entry
+       ;; If the user entered the JID of one of the preconfigured
+       ;; accounts, use that data.
+       (setq password (cdr (assq :password alist)))
+       (setq network-server (cdr (assq :network-server alist)))
+       (setq port (cdr (assq :port alist)))
+       (setq connection-type (cdr (assq :connection-type alist))))
+     (when (equal current-prefix-arg '(16))
+       ;; Double prefix arg: ask about everything.
+       ;; (except password, which is asked about later anyway)
+       (setq password nil)
+       (setq network-server
+	     (read-string (format "Network server: (default `%s') " network-server)
+			  nil nil network-server))
+       (when (zerop (length network-server))
+	 (setq network-server nil))
+       (setq port
+	     (car
+	      (read-from-string
+	       (read-string (format "Port: (default `%s') " port)
+			    nil nil (if port (number-to-string port) "nil")))))
+       (setq connection-type
+	     (car
+	      (read-from-string
+	       (let ((default (symbol-name (or connection-type jabber-default-connection-type))))
+		 (completing-read
+		  (format "Connection type: (default `%s') " default)
+		  (mapcar (lambda (type)
+			    (cons (symbol-name (car type)) nil))
+			  jabber-connect-methods)
+		  nil t nil 'jabber-connection-type-history default)))))
+       (setq registerp (or jabber-silent-mode (yes-or-no-p "Register new account? "))))
+     (when (equal current-prefix-arg '(4))
+       (setq registerp t))
 
-       (list (jabber-jid-username jid)
-	     (jabber-jid-server jid)
-	     (jabber-jid-resource jid)
-	     registerp password network-server port connection-type))))
+     (list (jabber-jid-username jid)
+	   (jabber-jid-server jid)
+	   (jabber-jid-resource jid)
+	   registerp password network-server port connection-type)))
 
   (require 'jabber)
 
@@ -641,21 +638,20 @@ With double prefix argument, specify more connection details."
 	 ;; Record stream features, discarding earlier data:
 	 (setq state-data (plist-put state-data :stream-features stanza))
 	 (if (jabber-xml-get-children stanza 'bind)
-	     (labels
-		 ((handle-bind 
-		   (jc xml-data success)
-		   (fsm-send jc (list
-				 (if success :bind-success :bind-failure)
-				 xml-data))))
-	       ;; So let's bind a resource.  We can either pick a resource ourselves,
-	       ;; or have the server pick one for us.
-	       (let ((resource (plist-get state-data :resource)))
-		 (jabber-send-iq fsm nil "set"
-				 `(bind ((xmlns . "urn:ietf:params:xml:ns:xmpp-bind"))
-					,@(when resource
-					    `((resource () ,resource))))
-				 #'handle-bind t
-				 #'handle-bind nil))
+	     (let ((handle-bind
+		    (lambda (jc xml-data success)
+		      (fsm-send jc (list
+				    (if success :bind-success :bind-failure)
+				    xml-data))))
+		   ;; So let's bind a resource.  We can either pick a resource ourselves,
+		   ;; or have the server pick one for us.
+		   (resource (plist-get state-data :resource)))
+	       (jabber-send-iq fsm nil "set"
+			       `(bind ((xmlns . "urn:ietf:params:xml:ns:xmpp-bind"))
+				      ,@(when resource
+					  `((resource () ,resource))))
+			       handle-bind t
+			       handle-bind nil)
 	       (list :bind state-data))
 	   (message "Server doesn't permit resource binding")
 	   (list nil state-data)))
@@ -677,16 +673,15 @@ With double prefix argument, specify more connection details."
      ;; offer session initiation here.  If it follows RFCs 6120 and
      ;; 6121, it might not offer it, and we should just skip it.
      (if (jabber-xml-get-children (plist-get state-data :stream-features) 'session)
-	 (labels
-	     ((handle-session
-	       (jc xml-data success)
-	       (fsm-send jc (list
-			     (if success :session-success :session-failure)
-			     xml-data))))
+	 (let ((handle-session
+		(lambda (jc xml-data success)
+		  (fsm-send jc (list
+				(if success :session-success :session-failure)
+				xml-data)))))
 	   (jabber-send-iq fsm nil "set"
 			   '(session ((xmlns . "urn:ietf:params:xml:ns:xmpp-session")))
-			   #'handle-session t
-			   #'handle-session nil)
+			   handle-session t
+			   handle-session nil)
 	   (list :bind state-data))
        ;; Session establishment not offered - assume not necessary.
        (list :session-established state-data)))
