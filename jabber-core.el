@@ -27,7 +27,16 @@
 (require 'jabber-util)
 (require 'jabber-logon)
 (require 'jabber-conn)
-(require 'fsm)
+(eval-and-compile
+  (or (ignore-errors (require 'fsm))
+      (ignore-errors
+        (let ((load-path (cons (expand-file-name
+                                "jabber-fallback-lib"
+                                (file-name-directory (locate-library "jabber")))
+                               load-path)))
+          (require 'fsm)))
+      (error
+       "fsm not found in `load-path' or jabber-fallback-lib/ directory.")))
 
 (require 'jabber-sasl)
 (require 'jabber-console)
@@ -192,6 +201,10 @@ With double prefix argument, specify more connection details."
 	  (entry (assoc jid jabber-account-list))
 	  (alist (cdr entry))
 	  password network-server port connection-type registerp)
+     (when (zerop (length jid))
+       (error "No JID specified"))
+     (unless (jabber-jid-username jid)
+       (error "Missing username part in JID"))
      (when entry
        ;; If the user entered the JID of one of the preconfigured
        ;; accounts, use that data.
