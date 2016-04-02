@@ -111,15 +111,16 @@ enough for us."
     (if (search-forward "]]>" nil t)
 	(goto-char (match-end 0))
       (throw 'unfinished nil)))
-   ((looking-at "<\\([^ \t\n/>]+\\)\\([ \t\n]+[^=]+='[^']*'\\|[ \t\n]+[^=]+=\"[^\"]*\"\\)*")
+   ((looking-at "<\\([^[:space:]/>]+\\)\\([[:space:]]+[^=>]+=[[:space:]]*'[^']*'\\|[[:space:]]+[^=>]+=[[:space:]]*\"[^\"]*\"\\)*")
     (let ((node-name (match-string 1)))
       (goto-char (match-end 0))
+      (skip-syntax-forward "\s-") ; Skip over trailing white space.
       (cond
        ((looking-at "/>")
 	(goto-char (match-end 0))
 	t)
        ((looking-at ">")
-	(forward-char 1)
+	(goto-char (match-end 0))
 	(unless (and dont-recurse-into-stream (equal node-name "stream:stream"))
 	  (loop 
 	   do (skip-chars-forward "^<")
@@ -131,6 +132,17 @@ enough for us."
 	(throw 'unfinished nil)))))
    (t
     (throw 'unfinished nil))))
+
+(defun jabber-xml-parse-next-stanza ()
+  "Parse the first XML stanza in the current buffer.
+Parse and return the first complete XML element in the buffer,
+leaving point at the end of it.  If there is no complete XML
+element, return `nil'."
+  (and (catch 'unfinished
+	 (goto-char (point-min))
+	 (jabber-xml-skip-tag-forward)
+	 (> (point) (point-min)))
+       (xml-parse-region (point-min) (point))))
 
 (defsubst jabber-xml-node-name (node)
   "Return the tag associated with NODE.
